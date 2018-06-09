@@ -38,6 +38,8 @@ class SettingsViewController: UITableViewController, PinViewControllerDelegate {
     @IBOutlet weak var hidePasswordsEnabledSwitch: UISwitch!
 
     @IBOutlet weak var sortingEnabledSwitch: UISwitch!
+
+    @IBOutlet weak var searchTitleOnlySwitch: UISwitch!
     
     @IBOutlet weak var passwordEncodingCell: UITableViewCell!
     
@@ -117,6 +119,8 @@ class SettingsViewController: UITableViewController, PinViewControllerDelegate {
             hidePasswordsEnabledSwitch.isOn = appSettings.hidePasswords()
             
             sortingEnabledSwitch.isOn = appSettings.sortAlphabetically()
+
+            searchTitleOnlySwitch.isOn = appSettings.searchTitleOnly()
             
             passwordEncodingCell.detailTextLabel!.text = passwordEncodings[appSettings.passwordEncodingIndex()]
             
@@ -227,6 +231,9 @@ class SettingsViewController: UITableViewController, PinViewControllerDelegate {
             pinViewController.titleLabel.text = NSLocalizedString("Set PIN", comment: "")
             pinViewController.delegate = self
             
+            // Background is clear for lock screen blur, set to white to set the pin.
+            pinViewController.view.backgroundColor = UIColor.white
+            
             present(pinViewController, animated: true, completion: nil)
         } else {
             self.appSettings?.setPinEnabled(false)
@@ -271,7 +278,11 @@ class SettingsViewController: UITableViewController, PinViewControllerDelegate {
     @IBAction func sortingEnabledChanged(_ sender: UISwitch) {
         self.appSettings?.setSortAlphabetically(sortingEnabledSwitch.isOn)
     }
-    
+
+    @IBAction func searchTitleOnlyChanged(_ sender: UISwitch) {
+        self.appSettings?.setSearchTitleOnly(searchTitleOnlySwitch.isOn)
+    }
+
     @IBAction func clearClipboardEnabledChanged(_ sender: UISwitch) {
         self.appSettings?.setClearClipboardEnabled(clearClipboardEnabledSwitch.isOn)
         

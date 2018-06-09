@@ -17,7 +17,7 @@
 
 import UIKit
 
-class GroupViewController: UITableViewController {
+class GroupViewController: UITableViewController, UISearchResultsUpdating {
     private enum Section : Int {
         case groups = 0
         case entries = 1
@@ -45,6 +45,16 @@ class GroupViewController: UITableViewController {
     private var groups: [KdbGroup]!
     private var entries: [KdbEntry]!
 
+    private enum KdbItem {
+        case group(KdbGroup)
+        case entry(KdbEntry)
+    }
+    
+    private var selectedItem: KdbItem?
+    
+    private var searchController: UISearchController?
+    private var searchResults: [KdbEntry] = []
+
     var parentGroup: KdbGroup! {
         didSet {
             updateViewModel()
@@ -56,6 +66,9 @@ class GroupViewController: UITableViewController {
 
         // Add the edit button
         navigationItem.rightBarButtonItems = [self.editButtonItem]
+        if #available(iOS 11.0, *) {
+            self.navigationItem.largeTitleDisplayMode = .never
+        }
 
         let spacer = UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil)
 
@@ -72,68 +85,47 @@ class GroupViewController: UITableViewController {
         editingToolbarItems = [deleteButton, spacer, moveButton, spacer, renameButton]
 
         toolbarItems = standardToolbarItems
+        
+        // Search controller
+        definesPresentationContext = true // Ensure searchBar stays with tableView
+        searchController = UISearchController(searchResultsController: nil)
+        searchController?.searchResultsUpdater = self
+        searchController?.dimsBackgroundDuringPresentation = false
+        searchController?.hidesNavigationBarDuringPresentation = false
+        if #available(iOS 11.0, *) {
+            navigationItem.searchController = searchController
+            navigationItem.hidesSearchBarWhenScrolling = false
+        } else {
+            searchController?.searchBar.sizeToFit()
+            tableView.tableHeaderView = searchController?.searchBar
+        }
     }
 
     override func viewWillAppear(_ animated: Bool) {
         // Ensure cell reflects name change and proper cell is highlighted
-        var updatedIndexPath: IndexPath?
-
-        // Only matters if a cell was selected
-        if let indexPath = tableView.indexPathForSelectedRow {
-            let cell = tableView.cellForRow(at: indexPath)
-            let section = indexPath.section
-            
+        if selectedItem != nil {
             updateViewModel()
+            tableView.reloadData()
+
+            var section: Int?
+            var row: Int?
             
-            switch section {
-            case Section.groups.rawValue:
-                // Check if an update is needed
-                if groups[indexPath.row].name == cell?.textLabel?.text {
-                    break
-                }
-                
-                // Find most recently updated group
-                var index = -1
-                var mostRecent: KdbGroup?
-                for i in 0 ..< groups.count {
-                    let group = groups[i]
-                    if mostRecent == nil || group.lastModificationTime > mostRecent!.lastModificationTime {
-                        mostRecent = group
-                        index = i
-                    }
-                }
-
-                updatedIndexPath = IndexPath(row: index, section: section)
-            case Section.entries.rawValue:
-                // Check if an update is needed
-                if entries[indexPath.row].title() == cell?.textLabel?.text {
-                    break
-                }
-
-                // Find most recently updated entry
-                var index = -1
-                var mostRecent: KdbEntry?
-                for i in 0 ..< entries.count {
-                    let entry = entries[i]
-                    if mostRecent == nil || entry.lastModificationTime > mostRecent!.lastModificationTime {
-                        mostRecent = entry
-                        index = i
-                    }
-                }
-                
-                updatedIndexPath = IndexPath(row: index, section: section)
-            default: break
+            switch selectedItem! {
+            case .entry(let entry):
+                section = Section.entries.rawValue
+                row = entries.index(of: entry)
+            case .group(let group):
+                section = Section.groups.rawValue
+                row = groups.index(of: group)
+            }
+            selectedItem = nil
+            
+            if let section = section, let row = row {
+                tableView.selectRow(at: IndexPath(row: row, section: section), animated: false, scrollPosition: .middle)
             }
         }
         
         self.setEditing(false, animated: false)
-        
-        if updatedIndexPath != nil {
-            let indexSet = IndexSet(integer: updatedIndexPath!.section)
-            tableView.reloadSections(indexSet, with: .none)
-            
-            tableView.selectRow(at: updatedIndexPath, animated: false, scrollPosition: .none)
-        }
         
         super.viewWillAppear(animated)
     }
@@ -155,19 +147,26 @@ class GroupViewController: UITableViewController {
         
         if let destination = segue.destination as? GroupViewController {
             let group = groups[indexPath.row]
+            selectedItem = KdbItem.group(group)
             destination.parentGroup = group
             destination.title = group.name
         }
         else if let destination = segue.destination as? EntryViewController {
             let entry = entries[indexPath.row]
+            selectedItem = KdbItem.entry(entry)
             destination.entry = entry
             destination.title = entry.title()
         }
     }
     
     func updateViewModel() {
-        groups = parentGroup.groups as! [KdbGroup]
-        entries = parentGroup.entries as! [KdbEntry]
+        if searchController != nil && searchController!.isActive {
+            groups = []
+            entries = searchResults
+        } else {
+            groups = parentGroup.groups as! [KdbGroup]
+            entries = parentGroup.entries as! [KdbEntry]
+        }
 
         if let appSettings = AppSettings.sharedInstance(), appSettings.sortAlphabetically() {
             groups.sort {
@@ -189,7 +188,8 @@ class GroupViewController: UITableViewController {
         toolbarItems = editing ? editingToolbarItems : standardToolbarItems
         updateEditingToolbar()
 
-        // FIXME Enable/Disable the search bar
+        // Enable/Disable the search bar
+        searchController?.searchBar.isUserInteractionEnabled = !editing
     }
 
     private func updateEditingToolbar() {
@@ -354,7 +354,7 @@ class GroupViewController: UITableViewController {
 
     // MARK: - Actions
 
-    func settingsPressed(sender: UIBarButtonItem) {
+    @objc func settingsPressed(sender: UIBarButtonItem) {
         let storyboard = UIStoryboard(name: "Settings", bundle: nil)
         guard let viewController = storyboard.instantiateInitialViewController() else {
             return
@@ -363,7 +363,7 @@ class GroupViewController: UITableViewController {
         present(viewController, animated: true, completion: nil)
     }
 
-    func actionPressed(sender: UIBarButtonItem) {
+    @objc func actionPressed(sender: UIBarButtonItem) {
         // Get the URL of the database
         guard let appDelegate = AppDelegate.getDelegate() else {
             return
@@ -381,7 +381,7 @@ class GroupViewController: UITableViewController {
         }
     }
 
-    func addPressed(sender: UIBarButtonItem) {
+    @objc func addPressed(sender: UIBarButtonItem) {
         let alertController = UIAlertController(title: NSLocalizedString("Add", comment: ""), message: nil, preferredStyle: .alert)
 
         // Add an action to add a new group
@@ -474,12 +474,15 @@ class GroupViewController: UITableViewController {
         self.entries.insert(entry, at: index)
 
         // Update the table
+        let indexPath = IndexPath(row: index, section: Section.entries.rawValue)
         if (self.entries.count == 1) {
             self.tableView.reloadSections(NSIndexSet(index: Section.entries.rawValue) as IndexSet, with: .automatic)
         } else {
-            let indexPath = IndexPath(row: index, section: Section.entries.rawValue)
             self.tableView.insertRows(at: [indexPath], with: .automatic)
         }
+        
+        tableView.selectRow(at: indexPath, animated: false, scrollPosition: .none)
+        selectedItem = KdbItem.entry(entry)
 
         // Show the Entry view controller
         let viewController = EntryViewController(style: .grouped)
@@ -489,13 +492,13 @@ class GroupViewController: UITableViewController {
         navigationController?.pushViewController(viewController, animated: true)
     }
     
-    func deletePressed(sender: UIBarButtonItem) {
+    @objc func deletePressed(sender: UIBarButtonItem) {
         if let indexPaths = tableView.indexPathsForSelectedRows {
             deleteItems(indexPaths: indexPaths)
         }
     }
 
-    func movePressed(sender: UIBarButtonItem) {
+    @objc func movePressed(sender: UIBarButtonItem) {
         guard let indexPaths = tableView.indexPathsForSelectedRows else {
             // Nothing selected. Shouldn't have been possible to press "Move"
             return;
@@ -545,7 +548,7 @@ class GroupViewController: UITableViewController {
         present(navigationController, animated: true, completion: nil)
     }
 
-    func renamePressed(sender: UIBarButtonItem) {
+    @objc func renamePressed(sender: UIBarButtonItem) {
         guard let indexPath = tableView.indexPathForSelectedRow else {
             // Nothing selected. This shoudn't have been called
             return
@@ -560,11 +563,39 @@ class GroupViewController: UITableViewController {
         // Set the group/entry to rename
         switch Section.AllValues[indexPath.section] {
         case .groups:
-            viewController.group = groups[indexPath.row]
+            let group = groups[indexPath.row]
+            viewController.group = group
+            selectedItem = KdbItem.group(group)
         case .entries:
-            viewController.entry = entries[indexPath.row]
+            let entry = entries[indexPath.row]
+            viewController.entry = entry
+            selectedItem = KdbItem.entry(entry)
         }
 
         present(navigationController, animated: true, completion: nil)
+    }
+    
+    // MARK: - UISearchResultsUpdating
+    func updateSearchResults(for searchController: UISearchController) {
+        // Set state of UI buttons
+        let buttonsActive = !searchController.isActive
+        editButtonItem.isEnabled = buttonsActive
+        if let toolbarItems = toolbarItems {
+            for toolbarItem in toolbarItems {
+                toolbarItem.isEnabled = buttonsActive
+            }
+        }
+        
+        // Find results
+        let results = NSMutableArray()
+        DatabaseDocument.search(parentGroup, searchText: searchController.searchBar.text, results: results)
+        searchResults = results as! [KdbEntry]
+        searchResults.sort {
+            $0.title().localizedCaseInsensitiveCompare($1.title()) == .orderedAscending
+        }
+        
+        // Update table
+        updateViewModel()
+        tableView.reloadData()
     }
 }

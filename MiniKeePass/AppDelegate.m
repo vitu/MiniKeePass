@@ -101,15 +101,19 @@
     }
     [fileManager moveItemAtURL:url toURL:[NSURL fileURLWithPath:path] error:nil];
 
+    // Make sure the file is writable.
+    if (![fileManager isWritableFileAtPath:path]) {
+        [fileManager setAttributes:@{NSFilePosixPermissions:@0711} ofItemAtPath:path error:nil];
+    }
+    
     // Set file protection on the new file
     [fileManager setAttributes:@{NSFileProtectionKey:NSFileProtectionComplete} ofItemAtPath:path error:nil];
 
     // Delete the Inbox folder if it exists
     [fileManager removeItemAtPath:[documentsDirectory stringByAppendingPathComponent:@"Inbox"] error:nil];
 
-// FIXME Is this necessary, won't it update automatically?
-//    [self.filesViewController updateFiles];
-//    [self.filesViewController.tableView reloadData];
+    [self.filesViewController updateFiles];
+    [self.filesViewController.tableView reloadData];
 }
 
 - (void)setDatabaseDocument:(DatabaseDocument *)newDatabaseDocument {

@@ -57,6 +57,7 @@ static NSString *TextFieldCellIdentifier = @"TextFieldCell";
 @implementation EntryViewController
 
 - (void)viewDidLoad {
+    [super viewDidLoad];
     self.navigationItem.rightBarButtonItem = self.editButtonItem;
     
     [self.tableView registerNib:[UINib nibWithNibName:@"TextFieldCell" bundle:nil] forCellReuseIdentifier:TextFieldCellIdentifier];
@@ -72,6 +73,7 @@ static NSString *TextFieldCellIdentifier = @"TextFieldCell";
     [self setSelectedImageIndex:self.entry.image];
     
     usernameCell = [self.tableView dequeueReusableCellWithIdentifier:TextFieldCellIdentifier];
+    usernameCell.style = TextFieldCellStylePlain;
     usernameCell.title = NSLocalizedString(@"Username", nil);
     usernameCell.delegate = self;
     usernameCell.textField.placeholder = NSLocalizedString(@"Username", nil);
@@ -295,6 +297,7 @@ static NSString *TextFieldCellIdentifier = @"TextFieldCell";
             if (textFieldCell.style == TextFieldCellStyleTitle) {
                 self.title = textFieldCell.textField.text;
             }
+            break;
         }
         case SECTION_CUSTOM_FIELDS: {
             if (indexPath.row < self.editingStringFields.count) {
@@ -410,6 +413,7 @@ static NSString *TextFieldCellIdentifier = @"TextFieldCell";
 
                 StringField *stringField = [self.currentStringFields objectAtIndex:indexPath.row];
 
+                cell.style = TextFieldCellStylePlain;
                 cell.title = stringField.key;
                 cell.textField.text = stringField.value;
                 cell.textField.enabled = self.editing;
